@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { getCurrentUserProfile } from '@/lib/profile'
 import { Button } from '@/components/ui/button'
 import { Dumbbell, Utensils, TrendingUp, Crown, Bell, LogOut } from 'lucide-react'
 import OnboardingForm from '@/components/onboarding-form'
@@ -40,12 +41,8 @@ export default function Home() {
       setUserId(user.id)
       setUserName(user.user_metadata?.name || user.email?.split('@')[0] || 'Usuário')
 
-      // Verificar se usuário tem perfil
-      const { data: profile, error: profileError } = await supabase
-        .from('users_profile')
-        .select('*')
-        .eq('id', user.id)
-        .single()
+      // Usar a função getCurrentUserProfile em vez de fetch direto
+      const profile = await getCurrentUserProfile()
 
       if (profile) {
         setIsPremium(profile.is_premium || false)

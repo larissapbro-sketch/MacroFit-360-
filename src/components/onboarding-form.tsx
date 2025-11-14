@@ -59,24 +59,25 @@ export default function OnboardingForm({ userId, onComplete }: OnboardingFormPro
 
       console.log('📊 Macros calculados:', macros)
 
-      // 3) Salvar perfil do usuário no Supabase (payload simplificado e alinhado)
+      // 3) Salvar perfil do usuário no Supabase (payload alinhado com a tabela)
       const profilePayload = {
-        id: currentUserId,
+        user_id: currentUserId,            // <-- campo correto: user_id
         weight: Number(formData.weight),
         height: Number(formData.height),
         age: Number(formData.age),
-        sex: formData.gender, // Campo correto: 'sex'
+        gender: formData.gender,           // <-- campo correto: gender
         goal: formData.goal,
         training_days: Number(formData.training_days),
         equipment: formData.equipment,
-        budget: Number(formData.weekly_budget) // Campo correto: 'budget'
+        weekly_budget: Number(formData.weekly_budget),  // <-- campo correto: weekly_budget
+        is_premium: false
       }
 
       console.log('💾 Salvando perfil:', profilePayload)
 
       const { data: profileData, error: profileError } = await supabase
         .from('users_profile')
-        .upsert(profilePayload, { onConflict: 'id' })
+        .upsert(profilePayload, { onConflict: 'user_id' })
         .select()
 
       if (profileError) {

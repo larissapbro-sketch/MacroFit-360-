@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { getCurrentUserProfile } from '@/lib/profile'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { TrendingUp, TrendingDown, Activity, Flame, Apple, Dumbbell } from 'lucide-react'
+import { TrendingUp, TrendingDown, Activity, Flame, Apple, Dumbbell, AlertCircle } from 'lucide-react'
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
 interface DashboardProps {
@@ -21,6 +22,8 @@ export default function Dashboard({ userId, isPremium }: DashboardProps) {
     fats: 0,
     workoutCompleted: false
   })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     loadDashboardData()
@@ -28,27 +31,76 @@ export default function Dashboard({ userId, isPremium }: DashboardProps) {
 
   async function loadDashboardData() {
     try {
-      // Carregar perfil
-      const { data: profileData } = await supabase
-        .from('users_profile')
-        .select('*')
-        .eq('user_id', userId)
-        .single()
+      setLoading(true)
+      setError(null)
 
+      // Carregar perfil usando a nova função
+      const profileData = await getCurrentUserProfile()
+      
+      if (!profileData) {
+        setError("Perfil não encontrado. Complete o onboarding primeiro.")
+        setLoading(false)
+        return
+      }
+      
       setProfile(profileData)
 
-      // Carregar progresso da semana
-      const { data: progressData } = await supabase
-        .from('progress_tracking')
-        .select('*')
-        .eq('user_id', userId)
-        .order('date', { ascending: true })
-        .limit(7)
+      // Carregar progresso da semana com tratamento de erro
+      try {
+        const { data: progressData, error: progressError } = await supabase
+          .from('progress')
+          .select('*')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: true })
+          .limit(7)
 
-      setWeekProgress(progressData || [])
-    } catch (error) {
+        if (progressError) {
+          console.error("Erro ao carregar progresso:", progressError)
+          // Não bloqueia o dashboard, apenas não mostra gráficos
+          setWeekProgress([])
+        } else {
+          setWeekProgress(progressData || [])
+        }
+      } catch (progressErr) {
+        console.error("Erro ao buscar progresso:", progressErr)
+        setWeekProgress([])
+      }
+
+      setLoading(false)
+    } catch (error: any) {
       console.error('Erro ao carregar dashboard:', error)
+      setError(error?.message || "Erro ao carregar dados do dashboard")
+      setLoading(false)
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="text-center">
+          <div className="bg-gradient-to-br from-cyan-500 to-blue-600 p-4 rounded-xl inline-block mb-4 animate-pulse">
+            <Activity className="w-8 h-8 text-white" />
+          </div>
+          <p className="text-slate-400">Carregando dashboard...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card className="bg-red-500/10 border-red-500/20">
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-3">
+            <AlertCircle className="w-6 h-6 text-red-400" />
+            <div>
+              <p className="text-red-400 font-semibold">Erro ao carregar dashboard</p>
+              <p className="text-slate-400 text-sm">{error}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   const macroTargets = profile ? {
@@ -181,50 +233,62 @@ export default function Dashboard({ userId, isPremium }: DashboardProps) {
       </Card>
 
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card className="bg-slate-900/50 border-slate-800">
-          <CardHeader>
-            <CardTitle className="text-white">Evolução de Peso</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="name" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
-                  labelStyle={{ color: '#f1f5f9' }}
-                />
-                <Line type="monotone" dataKey="peso" stroke="#06b6d4" strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      {weekProgress.length > 0 ? (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <Card className="bg-slate-900/50 border-slate-800">
+            <CardHeader>
+              <CardTitle className="text-white">Evolução de Peso</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="name" stroke="#94a3b8" />
+                  <YAxis stroke="#94a3b8" />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
+                    labelStyle={{ color: '#f1f5f9' }}
+                  />
+                  <Line type="monotone" dataKey="peso" stroke="#06b6d4" strokeWidth={2} />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
 
+          <Card className="bg-slate-900/50 border-slate-800">
+            <CardHeader>
+              <CardTitle className="text-white">Macros Semanais</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="name" stroke="#94a3b8" />
+                  <YAxis stroke="#94a3b8" />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
+                    labelStyle={{ color: '#f1f5f9' }}
+                  />
+                  <Legend />
+                  <Bar dataKey="proteina" fill="#06b6d4" />
+                  <Bar dataKey="carboidratos" fill="#8b5cf6" />
+                  <Bar dataKey="gorduras" fill="#f59e0b" />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
+      ) : (
         <Card className="bg-slate-900/50 border-slate-800">
-          <CardHeader>
-            <CardTitle className="text-white">Macros Semanais</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis dataKey="name" stroke="#94a3b8" />
-                <YAxis stroke="#94a3b8" />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155' }}
-                  labelStyle={{ color: '#f1f5f9' }}
-                />
-                <Legend />
-                <Bar dataKey="proteina" fill="#06b6d4" />
-                <Bar dataKey="carboidratos" fill="#8b5cf6" />
-                <Bar dataKey="gorduras" fill="#f59e0b" />
-              </BarChart>
-            </ResponsiveContainer>
+          <CardContent className="pt-6">
+            <div className="text-center py-8">
+              <Activity className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+              <p className="text-slate-400">Nenhum dado de progresso ainda</p>
+              <p className="text-slate-500 text-sm mt-1">Comece a registrar seu progresso para ver gráficos aqui</p>
+            </div>
           </CardContent>
         </Card>
-      </div>
+      )}
 
       {/* Premium Upsell */}
       {!isPremium && (
@@ -232,6 +296,9 @@ export default function Dashboard({ userId, isPremium }: DashboardProps) {
           <CardContent className="pt-6">
             <div className="text-center space-y-3">
               <h3 className="text-xl font-bold text-white">Desbloqueie Todo o Potencial</h3>
+              <CardDescription className="text-slate-400">
+                Aproveite o máximo do MacroFit 360° com a versão Premium.
+              </CardDescription>
               <p className="text-slate-400">
                 Upgrade para Premium e tenha acesso a planos completos, histórico avançado e muito mais!
               </p>

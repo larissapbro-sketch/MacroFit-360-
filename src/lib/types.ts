@@ -42,13 +42,13 @@ export interface WorkoutPlan {
 export interface ProgressTracking {
   id?: string
   user_id: string
-  date: string
+  created_at?: string
   weight: number
   workout_completed: boolean
   protein_intake: number
   carbs_intake: number
   fats_intake: number
-  notes: string
+  note?: string
 }
 
 export interface MacroTargets {
