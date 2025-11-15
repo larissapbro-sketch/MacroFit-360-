@@ -9,6 +9,9 @@ import { Dumbbell, Mail, Lock, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
+// Forçar renderização dinâmica (não pré-renderizar durante build)
+export const dynamic = 'force-dynamic'
+
 export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')

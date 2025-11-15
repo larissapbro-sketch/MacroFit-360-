@@ -1,9 +1,55 @@
+"use client"
+
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+// Função para obter variáveis de ambiente de forma segura
+function getEnvVar(key: string): string {
+  if (typeof window !== 'undefined') {
+    // No browser, use process.env
+    return process.env[key] || ''
+  }
+  // Durante SSR/build, retorne string vazia
+  return ''
+}
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Obter variáveis de ambiente de forma segura
+const supabaseUrl = getEnvVar('NEXT_PUBLIC_SUPABASE_URL')
+const supabaseAnonKey = getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY')
+
+// Apenas avisar no browser, não durante o build
+if (typeof window !== 'undefined' && (!supabaseUrl || !supabaseAnonKey)) {
+  console.error('⚠️ Variáveis de ambiente do Supabase não configuradas!')
+}
+
+// Criar cliente com configurações otimizadas
+export const supabase = createClient(
+  supabaseUrl || 'https://placeholder.supabase.co',
+  supabaseAnonKey || 'placeholder-key',
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      flowType: 'pkce'
+    },
+    global: {
+      headers: {
+        'x-application-name': 'MacroFit360'
+      }
+    }
+  }
+)
+
+// Função auxiliar para verificar conexão
+export async function checkSupabaseConnection(): Promise<boolean> {
+  try {
+    const { error } = await supabase.from('users_profile').select('count', { count: 'exact', head: true })
+    return !error
+  } catch (error) {
+    console.error('Erro ao verificar conexão com Supabase:', error)
+    return false
+  }
+}
 
 export type Database = {
   public: {

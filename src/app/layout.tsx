@@ -2,7 +2,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
-import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 // Import all available fonts for AI usage
 import "../lib/fonts";
@@ -18,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MacroFit 360° - Treino e Alimentação por IA",
-  description: "Planos personalizados de treino e alimentação gerados por IA",
+  title: "Criado com a Lasy",
+  description: "Projeto criado com Lasy AI",
 };
 
 export default function RootLayout({
@@ -36,7 +35,6 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {children}
-        <Toaster />
       </body>
     </html>
   );
