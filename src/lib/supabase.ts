@@ -11,33 +11,30 @@ export type Database = {
       users_profile: {
         Row: {
           id: string
-          name: string | null
-          email: string | null
-          weight: number | null
-          height: number | null
-          age: number | null
-          sex: string | null
-          goal: string | null
-          training_days: number | null
-          equipment: string | null
-          budget: number | null
+          user_id: string
+          weight: number
+          height: number
+          age: number
+          gender: string
+          goal: string
+          training_days: number
+          equipment: string
+          weekly_budget: number
           is_premium: boolean
           created_at: string
+          updated_at: string
         }
         Insert: {
-          id: string
-          name?: string | null
-          email?: string | null
-          weight?: number | null
-          height?: number | null
-          age?: number | null
-          sex?: string | null
-          goal?: string | null
-          training_days?: number | null
-          equipment?: string | null
-          budget?: number | null
+          user_id: string
+          weight: number
+          height: number
+          age: number
+          gender: string
+          goal: string
+          training_days: number
+          equipment: string
+          weekly_budget: number
           is_premium?: boolean
-          created_at?: string
         }
         Update: Partial<Database['public']['Tables']['users_profile']['Insert']>
       }
@@ -54,7 +51,16 @@ export type Database = {
           calories: number
           created_at: string
         }
-        Insert: Omit<Database['public']['Tables']['meal_plans']['Row'], 'id' | 'created_at'>
+        Insert: {
+          user_id: string
+          day: number
+          meal_name: string
+          foods: string
+          protein: number
+          carbs: number
+          fats: number
+          calories: number
+        }
         Update: Partial<Database['public']['Tables']['meal_plans']['Insert']>
       }
       workout_plans: {
@@ -66,10 +72,18 @@ export type Database = {
           sets: number
           reps: string
           rest: number
-          notes: string
+          notes: string | null
           created_at: string
         }
-        Insert: Omit<Database['public']['Tables']['workout_plans']['Row'], 'id' | 'created_at'>
+        Insert: {
+          user_id: string
+          day: number
+          exercise_name: string
+          sets: number
+          reps: string
+          rest: number
+          notes?: string | null
+        }
         Update: Partial<Database['public']['Tables']['workout_plans']['Insert']>
       }
       progress_tracking: {
@@ -85,7 +99,16 @@ export type Database = {
           notes: string
           created_at: string
         }
-        Insert: Omit<Database['public']['Tables']['progress_tracking']['Row'], 'id' | 'created_at'>
+        Insert: {
+          user_id: string
+          date: string
+          weight: number
+          workout_completed: boolean
+          protein_intake: number
+          carbs_intake: number
+          fats_intake: number
+          notes: string
+        }
         Update: Partial<Database['public']['Tables']['progress_tracking']['Insert']>
       }
     }

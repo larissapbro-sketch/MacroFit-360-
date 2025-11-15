@@ -1,148 +1,194 @@
-// src/lib/ai-planner.ts
+import OpenAI from 'openai'
 
-// Tipos básicos (pode ajustar se já tiver types prontos)
-type Macros = {
-  calories: number
-  protein: number
-  carbs: number
-  fats: number
-}
-
-type Goal = 'hipertrofia' | 'definicao' | 'perda_gordura'
+type Goal = 'perder_peso' | 'ganhar_massa' | 'manter_peso' | 'hipertrofia' | 'definicao' | 'perda_gordura'
 type Equipment = 'academia' | 'casa' | 'elasticos' | 'peso_corporal'
 
-type Meal = {
-  day: number
-  meal_name: string
-  foods: string
-  protein: number
-  carbs: number
-  fats: number
-  calories: number
+// Função helper para criar cliente OpenAI apenas quando necessário
+function getOpenAIClient(): OpenAI {
+  const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY
+  
+  if (!apiKey) {
+    throw new Error('Configure sua chave da OpenAI nas variáveis de ambiente')
+  }
+  
+  return new OpenAI({
+    apiKey,
+    dangerouslyAllowBrowser: true
+  })
 }
 
-type WorkoutExercise = {
-  day: number
-  exercise_name: string
-  sets: number
-  reps: string
-  rest: string
-  notes?: string
-}
-
-/**
- * Gera um plano alimentar simples baseado nas macros.
- * NÃO usa IA, é só uma lógica local pra não quebrar o app.
- */
 export async function generateMealPlan(
-  macros: Macros,
+  macros: { calories: number; protein: number; carbs: number; fats: number },
   goal: Goal,
   weeklyBudget: number,
   isPremium: boolean
-): Promise<Meal[]> {
-  // Dividir calorias e macros em 4 refeições por dia
-  const mealsPerDay = 4
-  const days = 7
+): Promise<any[]> {
+  const daysToGenerate = isPremium ? 7 : 3
 
-  const caloriesPerMeal = Math.round(macros.calories / mealsPerDay)
-  const proteinPerMeal = Math.round(macros.protein / mealsPerDay)
-  const carbsPerMeal = Math.round(macros.carbs / mealsPerDay)
-  const fatsPerMeal = Math.round(macros.fats / mealsPerDay)
-
-  const baseFoodsByGoal: Record<Goal, string[]> = {
-    hipertrofia: [
-      'Arroz integral + frango grelhado + legumes',
-      'Macarrão integral + carne moída magra + salada',
-      'Omelete de ovos + pão integral + frutas',
-      'Iogurte grego + aveia + frutas'
-    ],
-    definicao: [
-      'Peito de frango + salada verde + batata doce',
-      'Peixe grelhado + legumes no vapor',
-      'Ovos mexidos + legumes salteados',
-      'Iogurte natural + castanhas + frutas vermelhas'
-    ],
-    perda_gordura: [
-      'Peito de frango + salada verde',
-      'Peixe grelhado + legumes cozidos',
-      'Ovos mexidos + salada crua',
-      'Iogurte desnatado + frutas'
-    ]
+  const goalMap: Record<Goal, string> = {
+    perder_peso: 'perda de peso com déficit calórico',
+    ganhar_massa: 'ganho de massa muscular com superávit calórico',
+    manter_peso: 'manutenção de peso com calorias balanceadas',
+    hipertrofia: 'ganho de massa muscular com superávit calórico',
+    definicao: 'definição muscular com déficit calórico moderado',
+    perda_gordura: 'perda de gordura com déficit calórico'
   }
 
-  const names = ['Café da Manhã', 'Almoço', 'Lanche da Tarde', 'Jantar']
+  const prompt = `Você é um nutricionista especializado. Crie um plano alimentar de ${daysToGenerate} dias com as seguintes especificações:
 
-  const meals: Meal[] = []
+Objetivo: ${goalMap[goal]}
+Meta calórica diária: ${macros.calories} kcal
+Proteínas: ${macros.protein}g
+Carboidratos: ${macros.carbs}g
+Gorduras: ${macros.fats}g
+Orçamento semanal: R$ ${weeklyBudget}
 
-  for (let day = 1; day <= days; day++) {
-    for (let i = 0; i < mealsPerDay; i++) {
-      const foods = baseFoodsByGoal[goal][i % baseFoodsByGoal[goal].length]
+Regras:
+1. Crie refeições balanceadas e nutritivas
+2. Respeite o orçamento fornecido
+3. Inclua café da manhã, almoço, jantar e 2 lanches
+4. Especifique quantidades e calorias aproximadas
+5. Adapte ao objetivo nutricional
 
-      meals.push({
-        day,
-        meal_name: names[i],
-        foods,
-        protein: proteinPerMeal,
-        carbs: carbsPerMeal,
-        fats: fatsPerMeal,
-        calories: caloriesPerMeal
-      })
+Retorne APENAS um JSON válido no formato:
+[
+  {
+    "day": 1,
+    "meal_name": "Café da manhã",
+    "foods": "Aveia 50g, Banana 1 unidade, Whey protein 30g",
+    "protein": 35,
+    "carbs": 60,
+    "fats": 8,
+    "calories": 450
+  },
+  {
+    "day": 1,
+    "meal_name": "Lanche da manhã",
+    "foods": "Iogurte grego 150g, Castanhas 20g",
+    "protein": 15,
+    "carbs": 12,
+    "fats": 15,
+    "calories": 230
+  }
+]`
+
+  try {
+    const openai = getOpenAIClient()
+    
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      temperature: 0.7
+    })
+
+    const content = response.choices[0].message.content
+    if (!content) throw new Error('Resposta vazia da IA')
+
+    const parsed = JSON.parse(content)
+    return parsed.plan || parsed.meals || parsed
+  } catch (error: any) {
+    console.error('Erro detalhado em generateMealPlan:', error)
+    
+    // Erro específico de API key
+    if (error?.message?.includes('OPENAI_API_KEY') || error?.message?.includes('Configure sua chave')) {
+      throw new Error('Configure sua chave da OpenAI nas variáveis de ambiente')
     }
+    
+    // Erro de API key inválida
+    if (error?.status === 401 || error?.message?.includes('Invalid API key')) {
+      throw new Error('Chave da OpenAI inválida. Verifique se você configurou a chave correta.')
+    }
+    
+    throw new Error('Falha ao gerar plano alimentar: ' + (error?.message || 'Erro desconhecido'))
   }
-
-  return meals
 }
 
-/**
- * Gera um plano de treino simples baseado no objetivo e dias de treino.
- * Também sem IA, só lógica local.
- */
 export async function generateWorkoutPlan(
   goal: Goal,
   trainingDays: number,
   equipment: Equipment,
   isPremium: boolean
-): Promise<WorkoutExercise[]> {
-  const baseWorkoutsByGoal: Record<Goal, string[][]> = {
-    hipertrofia: [
-      ['Supino reto', 'Supino inclinado', 'Crucifixo', 'Tríceps testa'],
-      ['Agachamento livre', 'Leg press', 'Cadeira extensora', 'Stiff'],
-      ['Puxada frente', 'Remada curvada', 'Rosca direta', 'Rosca martelo']
-    ],
-    definicao: [
-      ['Supino reto', 'Flexão de braço', 'Mergulho em banco'],
-      ['Agachamento', 'Afundo', 'Levantamento terra romeno'],
-      ['Puxada frente', 'Remada sentada', 'Rosca direta']
-    ],
-    perda_gordura: [
-      ['Circuito corpo inteiro', 'Burpees', 'Polichinelo'],
-      ['Agachamento + salto', 'Corrida estacionária', 'Mountain climber'],
-      ['Flexões', 'Prancha', 'Abdominais']
-    ]
+): Promise<any[]> {
+  const daysToGenerate = isPremium ? trainingDays : Math.min(trainingDays, 2)
+
+  const equipmentMap = {
+    academia: 'academia completa com máquinas e pesos livres',
+    casa: 'equipamentos básicos de casa (halteres, barras)',
+    elasticos: 'elásticos de resistência',
+    peso_corporal: 'apenas peso corporal (calistenia)'
   }
 
-  const selectedWorkouts = baseWorkoutsByGoal[goal]
-  const days = Math.min(trainingDays, selectedWorkouts.length)
+  const goalMap: Record<Goal, string> = {
+    perder_peso: 'perda de peso',
+    ganhar_massa: 'ganho de massa muscular',
+    manter_peso: 'manutenção de peso',
+    hipertrofia: 'hipertrofia muscular',
+    definicao: 'definição muscular',
+    perda_gordura: 'perda de gordura'
+  }
 
-  const result: WorkoutExercise[] = []
+  const prompt = `Você é um personal trainer especializado. Crie um plano de treino de ${daysToGenerate} dias com as seguintes especificações:
 
-  for (let day = 1; day <= days; day++) {
-    const exercises = selectedWorkouts[day - 1]
+Objetivo: ${goalMap[goal]}
+Equipamentos disponíveis: ${equipmentMap[equipment]}
+Dias de treino por semana: ${trainingDays}
 
-    for (const exercise of exercises) {
-      result.push({
-        day,
-        exercise_name: exercise,
-        sets: goal === 'perda_gordura' ? 3 : 4,
-        reps: goal === 'perda_gordura' ? '15–20' : '8–12',
-        rest: goal === 'perda_gordura' ? '30–45s' : '60–90s',
-        notes:
-          equipment === 'casa'
-            ? 'Use halteres ou peso corporal se não tiver equipamentos.'
-            : undefined
-      })
+Regras:
+1. Crie treinos completos e balanceados
+2. Inclua aquecimento e alongamento
+3. Especifique séries, repetições e tempo de descanso
+4. Adapte os exercícios ao equipamento disponível
+5. Progressão adequada ao objetivo
+
+Retorne APENAS um JSON válido no formato:
+[
+  {
+    "day": 1,
+    "exercise_name": "Supino reto",
+    "sets": 4,
+    "reps": "8-12",
+    "rest": 90,
+    "notes": "Controle a descida, explosão na subida"
+  },
+  {
+    "day": 1,
+    "exercise_name": "Crucifixo inclinado",
+    "sets": 3,
+    "reps": "10-15",
+    "rest": 60,
+    "notes": "Foco na contração do peitoral"
+  }
+]`
+
+  try {
+    const openai = getOpenAIClient()
+    
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      temperature: 0.7
+    })
+
+    const content = response.choices[0].message.content
+    if (!content) throw new Error('Resposta vazia da IA')
+
+    const parsed = JSON.parse(content)
+    return parsed.plan || parsed.exercises || parsed
+  } catch (error: any) {
+    console.error('Erro detalhado em generateWorkoutPlan:', error)
+    
+    // Erro específico de API key
+    if (error?.message?.includes('OPENAI_API_KEY') || error?.message?.includes('Configure sua chave')) {
+      throw new Error('Configure sua chave da OpenAI nas variáveis de ambiente')
     }
+    
+    // Erro de API key inválida
+    if (error?.status === 401 || error?.message?.includes('Invalid API key')) {
+      throw new Error('Chave da OpenAI inválida. Verifique se você configurou a chave correta.')
+    }
+    
+    throw new Error('Falha ao gerar plano de treino: ' + (error?.message || 'Erro desconhecido'))
   }
-
-  return result
 }
