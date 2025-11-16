@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { getBrowserSupabase } from '@/lib/supabase'
 import { getCurrentUserProfile } from '@/lib/profile'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
@@ -44,6 +44,16 @@ export default function Dashboard({ userId, isPremium }: DashboardProps) {
       }
       
       setProfile(profileData)
+
+      // Obter cliente Supabase
+      const supabase = getBrowserSupabase()
+      
+      if (!supabase) {
+        console.error('Cliente Supabase não disponível')
+        setWeekProgress([])
+        setLoading(false)
+        return
+      }
 
       // Carregar progresso da semana com tratamento de erro
       try {

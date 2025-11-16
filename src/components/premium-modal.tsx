@@ -1,15 +1,173 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { X, Crown, Check, Sparkles } from 'lucide-react'
+import { X, Crown, Check, Sparkles, Copy, Loader2, CreditCard } from 'lucide-react'
+import { CreatePaymentResponse } from '@/lib/types/payment'
 
 interface PremiumModalProps {
+  userId: string
   onClose: () => void
   onUpgrade: () => void
 }
 
-export default function PremiumModal({ onClose, onUpgrade }: PremiumModalProps) {
+export default function PremiumModal({ userId, onClose, onUpgrade }: PremiumModalProps) {
+  const [loading, setLoading] = useState(false)
+  const [paymentData, setPaymentData] = useState<CreatePaymentResponse | null>(null)
+  const [selectedMethod, setSelectedMethod] = useState<'pix' | 'credit_card' | null>(null)
+  const [copied, setCopied] = useState(false)
+  const [polling, setPolling] = useState(false)
+
+  // Polling para verificar status do pagamento
+  useEffect(() => {
+    if (!polling || !paymentData?.subscriptionId) return
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/subscription-status?userId=${userId}`)
+        const data = await response.json()
+
+        if (data.isPremium) {
+          setPolling(false)
+          onUpgrade() // Atualiza o estado no componente pai
+          onClose()
+        }
+      } catch (error) {
+        console.error('Erro ao verificar status:', error)
+      }
+    }, 3000) // Verifica a cada 3 segundos
+
+    return () => clearInterval(interval)
+  }, [polling, paymentData, userId, onUpgrade, onClose])
+
+  const handlePayment = async (method: 'pix' | 'credit_card') => {
+    setLoading(true)
+    setSelectedMethod(method)
+
+    try {
+      const response = await fetch('/api/create-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          planId: 'premium_monthly',
+          paymentMethod: method
+        })
+      })
+
+      const data: CreatePaymentResponse = await response.json()
+
+      if (!data.success) {
+        throw new Error(data.error || 'Erro ao criar pagamento')
+      }
+
+      setPaymentData(data)
+
+      // Se for PIX, iniciar polling
+      if (method === 'pix') {
+        setPolling(true)
+      }
+
+      // Se for cartão, redirecionar para checkout
+      if (method === 'credit_card' && data.checkout_url) {
+        window.location.href = data.checkout_url
+      }
+
+    } catch (error: any) {
+      console.error('Erro ao processar pagamento:', error)
+      alert(error.message || 'Erro ao processar pagamento. Tente novamente.')
+      setPaymentData(null)
+      setSelectedMethod(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const copyPixCode = () => {
+    if (paymentData?.copy_paste) {
+      navigator.clipboard.writeText(paymentData.copy_paste)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+  }
+
+  // Tela de pagamento PIX
+  if (selectedMethod === 'pix' && paymentData) {
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <Card className="max-w-md w-full bg-slate-900 border-slate-800 relative">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-slate-400 hover:text-white transition-colors"
+          >
+            <X className="w-6 h-6" />
+          </button>
+
+          <CardHeader className="text-center pb-4">
+            <CardTitle className="text-2xl font-bold text-white">
+              Pagamento PIX
+            </CardTitle>
+            <p className="text-slate-400 text-sm mt-2">
+              Escaneie o QR Code ou copie o código
+            </p>
+          </CardHeader>
+
+          <CardContent className="space-y-6">
+            {/* QR Code */}
+            {paymentData.qr_code_base64 && (
+              <div className="flex justify-center">
+                <div className="bg-white p-4 rounded-xl">
+                  <img
+                    src={`data:image/png;base64,${paymentData.qr_code_base64}`}
+                    alt="QR Code PIX"
+                    className="w-64 h-64"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Código PIX Copia e Cola */}
+            <div className="space-y-2">
+              <label className="text-sm text-slate-400">Código PIX (Copia e Cola)</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={paymentData.copy_paste || ''}
+                  readOnly
+                  className="flex-1 bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-mono"
+                />
+                <Button
+                  onClick={copyPixCode}
+                  className="bg-slate-700 hover:bg-slate-600"
+                >
+                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+
+            {/* Status */}
+            <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-4 text-center">
+              <Loader2 className="w-6 h-6 text-cyan-400 animate-spin mx-auto mb-2" />
+              <p className="text-white font-medium">Aguardando pagamento...</p>
+              <p className="text-slate-400 text-sm mt-1">
+                Você será redirecionado automaticamente após a confirmação
+              </p>
+            </div>
+
+            {/* Expiração */}
+            {paymentData.expires_at && (
+              <p className="text-xs text-slate-500 text-center">
+                Este QR Code expira em 30 minutos
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Tela principal de seleção
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <Card className="max-w-2xl w-full bg-slate-900 border-slate-800 relative">
@@ -106,13 +264,37 @@ export default function PremiumModal({ onClose, onUpgrade }: PremiumModalProps) 
               <div className="text-4xl font-bold text-white">R$ 39</div>
               <div className="text-slate-400 text-sm">por mês</div>
             </div>
-            <Button
-              onClick={onUpgrade}
-              className="w-full bg-gradient-to-r from-orange-500 to-pink-600 hover:from-orange-600 hover:to-pink-700 text-white font-semibold text-lg py-6"
-            >
-              <Sparkles className="w-5 h-5 mr-2" />
-              Assinar Agora
-            </Button>
+
+            {/* Botões de Pagamento */}
+            <div className="space-y-3">
+              <Button
+                onClick={() => handlePayment('pix')}
+                disabled={loading}
+                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold text-lg py-6"
+              >
+                {loading && selectedMethod === 'pix' ? (
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                ) : (
+                  <Sparkles className="w-5 h-5 mr-2" />
+                )}
+                Pagar com PIX
+              </Button>
+
+              <Button
+                onClick={() => handlePayment('credit_card')}
+                disabled={loading}
+                variant="outline"
+                className="w-full border-slate-700 bg-slate-800 hover:bg-slate-700 text-white font-semibold text-lg py-6"
+              >
+                {loading && selectedMethod === 'credit_card' ? (
+                  <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                ) : (
+                  <CreditCard className="w-5 h-5 mr-2" />
+                )}
+                Pagar com Cartão
+              </Button>
+            </div>
+
             <p className="text-xs text-slate-500">
               Cancele quando quiser. Sem taxas ocultas.
             </p>
