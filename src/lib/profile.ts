@@ -1,14 +1,20 @@
 "use client";
 
-import { getBrowserSupabase } from "@/lib/supabase";
+import { getBrowserSupabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export async function getCurrentUserProfile() {
   try {
+    // Verificar se o Supabase está configurado ANTES de tentar qualquer operação
+    if (!isSupabaseConfigured()) {
+      console.warn("⚠️ Supabase não configurado. Variáveis de ambiente ausentes.");
+      return null;
+    }
+
     const supabase = getBrowserSupabase();
 
     // Verificar se o cliente Supabase está disponível
     if (!supabase) {
-      console.warn("⚠️ Supabase não configurado. Variáveis de ambiente ausentes.");
+      console.warn("⚠️ Cliente Supabase não disponível.");
       return null;
     }
 

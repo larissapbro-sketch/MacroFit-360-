@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { getBrowserSupabase } from '@/lib/supabase'
+import { getBrowserSupabase, isSupabaseConfigured } from '@/lib/supabase'
 import { getCurrentUserProfile } from '@/lib/profile'
 import { Button } from '@/components/ui/button'
 import { Dumbbell, Utensils, TrendingUp, Crown, Bell, LogOut, AlertCircle } from 'lucide-react'
@@ -30,6 +30,14 @@ export default function Home() {
   async function checkAuth() {
     try {
       setConnectionError(false)
+
+      // Verificar se Supabase está configurado ANTES de qualquer operação
+      if (!isSupabaseConfigured()) {
+        console.error('⚠️ Supabase não configurado - variáveis de ambiente ausentes!')
+        setConnectionError(true)
+        setLoading(false)
+        return
+      }
 
       // Obter cliente Supabase no browser
       const supabase = getBrowserSupabase()

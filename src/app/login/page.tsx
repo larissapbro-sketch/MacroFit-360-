@@ -1,11 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { getBrowserSupabase, isSupabaseConfigured } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Dumbbell, Mail, Lock, ArrowRight } from 'lucide-react'
+import { Dumbbell, Mail, Lock, ArrowRight, AlertCircle } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
@@ -25,6 +25,21 @@ export default function LoginPage() {
     setError('')
 
     try {
+      // Verificar se o Supabase está configurado ANTES de tentar login
+      if (!isSupabaseConfigured()) {
+        setError('Supabase não está configurado. Verifique as variáveis de ambiente.')
+        setLoading(false)
+        return
+      }
+
+      const supabase = getBrowserSupabase()
+
+      if (!supabase) {
+        setError('Cliente Supabase não disponível. Verifique a configuração.')
+        setLoading(false)
+        return
+      }
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -47,11 +62,19 @@ export default function LoginPage() {
         }
       }
     } catch (err: any) {
-      setError(err.message || 'Erro ao fazer login')
+      // Tratamento específico para erros de rede
+      if (err.message?.includes('fetch') || err.message?.includes('Failed to fetch')) {
+        setError('Erro de conexão. Verifique sua internet e tente novamente.')
+      } else {
+        setError(err.message || 'Erro ao fazer login')
+      }
     } finally {
       setLoading(false)
     }
   }
+
+  // Verificar se Supabase está configurado ao carregar a página
+  const supabaseConfigured = isSupabaseConfigured()
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 flex items-center justify-center p-4">
@@ -74,6 +97,21 @@ export default function LoginPage() {
           <h2 className="text-2xl font-bold text-white mb-2">Bem-vindo de volta</h2>
           <p className="text-slate-400 mb-6">Entre para continuar sua jornada fitness</p>
 
+          {/* Alerta de configuração */}
+          {!supabaseConfigured && (
+            <div className="bg-orange-500/10 border border-orange-500/50 rounded-lg p-4 mb-4 flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-orange-400 font-semibold mb-1">
+                  Configuração Necessária
+                </p>
+                <p className="text-xs text-orange-300">
+                  As variáveis de ambiente do Supabase não estão configuradas. Configure-as para usar o login.
+                </p>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleLogin} className="space-y-4">
             {/* Email */}
             <div className="space-y-2">
@@ -89,7 +127,8 @@ export default function LoginPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
+                  disabled={!supabaseConfigured}
+                  className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -108,7 +147,8 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500"
+                  disabled={!supabaseConfigured}
+                  className="pl-10 bg-slate-800/50 border-slate-700 text-white placeholder:text-slate-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
@@ -123,8 +163,8 @@ export default function LoginPage() {
             {/* Submit Button */}
             <Button
               type="submit"
-              disabled={loading}
-              className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold py-6"
+              disabled={loading || !supabaseConfigured}
+              className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold py-6 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? (
                 'Entrando...'
