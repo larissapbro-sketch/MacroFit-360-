@@ -47,23 +47,34 @@ export default function OnboardingForm({ userId, onComplete }: OnboardingFormPro
       const fileName = `${userId}-${Date.now()}.${fileExt}`
       const filePath = `profile-images/${fileName}`
 
+      console.log('Iniciando upload:', { filePath, fileType: file.type, fileSize: file.size })
+
       const { error: uploadError, data } = await supabase.storage
         .from('user-images')
         .upload(filePath, file, {
           cacheControl: '3600',
-          upsert: false
+          upsert: true,
+          contentType: file.type
         })
 
       if (uploadError) {
-        console.error('Erro no upload:', uploadError)
+        console.error('Erro detalhado no upload:', {
+          message: uploadError.message,
+          name: uploadError.name,
+          stack: uploadError.stack
+        })
         setErrorMessage(`Erro no upload: ${uploadError.message}`)
         return null
       }
+
+      console.log('Upload bem-sucedido:', data)
 
       // Obter URL pública
       const { data: { publicUrl } } = supabase.storage
         .from('user-images')
         .getPublicUrl(filePath)
+
+      console.log('URL pública gerada:', publicUrl)
 
       return publicUrl
     } catch (error: any) {
@@ -245,27 +256,98 @@ export default function OnboardingForm({ userId, onComplete }: OnboardingFormPro
         return
       }
 
+      // Validar dados antes de enviar
+      if (!formData.age || !formData.weight || !formData.height) {
+        setErrorMessage('Por favor, preencha todos os campos obrigatórios (idade, peso e altura)')
+        return
+      }
+
+      const age = parseInt(formData.age)
+      const weight = parseFloat(formData.weight)
+      const height = parseFloat(formData.height)
+      const training_days = parseInt(formData.training_days)
+      const weekly_budget = parseFloat(formData.weekly_budget)
+
+      // Validar valores numéricos
+      if (isNaN(age) || age < 10 || age > 120) {
+        setErrorMessage('Idade inválida. Deve estar entre 10 e 120 anos.')
+        return
+      }
+
+      if (isNaN(weight) || weight < 30 || weight > 300) {
+        setErrorMessage('Peso inválido. Deve estar entre 30 e 300 kg.')
+        return
+      }
+
+      if (isNaN(height) || height < 100 || height > 250) {
+        setErrorMessage('Altura inválida. Deve estar entre 100 e 250 cm.')
+        return
+      }
+
+      if (isNaN(training_days) || training_days < 1 || training_days > 7) {
+        setErrorMessage('Dias de treino inválidos. Deve estar entre 1 e 7.')
+        return
+      }
+
+      if (isNaN(weekly_budget) || weekly_budget < 0) {
+        setErrorMessage('Orçamento inválido. Deve ser um valor positivo.')
+        return
+      }
+
+      console.log('Criando perfil com dados:', {
+        user_id: userId,
+        age,
+        gender: formData.gender,
+        weight,
+        height,
+        goal: formData.goal,
+        training_days,
+        equipment: formData.equipment,
+        weekly_budget,
+        is_premium: false
+      })
+
       // Criar perfil do usuário com TODOS os campos obrigatórios
-      const { error: profileError } = await supabase
+      const { data: profileData, error: profileError } = await supabase
         .from('users_profile')
         .insert({
           user_id: userId,
-          age: parseInt(formData.age),
+          age,
           gender: formData.gender,
-          weight: parseFloat(formData.weight),
-          height: parseFloat(formData.height),
+          weight,
+          height,
           goal: formData.goal,
-          training_days: parseInt(formData.training_days),
+          training_days,
           equipment: formData.equipment,
-          weekly_budget: parseFloat(formData.weekly_budget),
+          weekly_budget,
           is_premium: false
         })
+        .select()
 
       if (profileError) {
-        console.error('Erro ao criar perfil:', profileError)
-        setErrorMessage('Erro ao criar perfil: ' + profileError.message)
+        console.error('Erro detalhado ao criar perfil:', {
+          message: profileError.message,
+          details: profileError.details,
+          hint: profileError.hint,
+          code: profileError.code
+        })
+        
+        let errorMsg = 'Erro ao criar perfil: '
+        if (profileError.message) {
+          errorMsg += profileError.message
+        }
+        if (profileError.hint) {
+          errorMsg += ` (Dica: ${profileError.hint})`
+        }
+        if (profileError.details) {
+          errorMsg += ` - Detalhes: ${profileError.details}`
+        }
+        
+        setErrorMessage(errorMsg)
         return
       }
+
+      console.log('Perfil criado com sucesso:', profileData)
 
       // Inserir dados de exemplo de progresso (últimos 7 dias)
       const progressData = []
@@ -277,7 +359,7 @@ export default function OnboardingForm({ userId, onComplete }: OnboardingFormPro
         
         progressData.push({
           user_id: userId,
-          weight: parseFloat(formData.weight) - (i * 0.2),
+          weight: weight - (i * 0.2),
           protein_intake: 120 + Math.floor(Math.random() * 30),
           carbs_intake: 180 + Math.floor(Math.random() * 40),
           fats_intake: 50 + Math.floor(Math.random() * 15),
@@ -589,15 +671,15 @@ export default function OnboardingForm({ userId, onComplete }: OnboardingFormPro
                   <RadioGroup
                     value={formData.gender}
                     onValueChange={(value) => setFormData({ ...formData, gender: value })}
-                    className="flex gap-4"
+                    className="flex gap-4 pt-2"
                   >
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="male" id="male" />
-                      <Label htmlFor="male" className="text-slate-300 cursor-pointer">Masculino</Label>
+                    <div className="flex items-center space-x-2 bg-slate-800 px-4 py-2 rounded-lg border border-slate-700 hover:border-cyan-500 transition-colors cursor-pointer">
+                      <RadioGroupItem value="male" id="male" className="border-slate-600" />
+                      <Label htmlFor="male" className="text-slate-300 cursor-pointer font-normal">Masculino</Label>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <RadioGroupItem value="female" id="female" />
-                      <Label htmlFor="female" className="text-slate-300 cursor-pointer">Feminino</Label>
+                    <div className="flex items-center space-x-2 bg-slate-800 px-4 py-2 rounded-lg border border-slate-700 hover:border-cyan-500 transition-colors cursor-pointer">
+                      <RadioGroupItem value="female" id="female" className="border-slate-600" />
+                      <Label htmlFor="female" className="text-slate-300 cursor-pointer font-normal">Feminino</Label>
                     </div>
                   </RadioGroup>
                 </div>

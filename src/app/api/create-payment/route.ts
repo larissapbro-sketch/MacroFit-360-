@@ -10,15 +10,21 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
 export async function POST(request: NextRequest) {
   try {
-    const body: CreatePaymentRequest = await request.json();
-    const { userId, planId, paymentMethod } = body;
-
-    // Validações
+    // Validação inicial dos parâmetros obrigatórios
+    const body = await request.json().catch(() => ({}))
+    const { userId, planId, paymentMethod } = body || {}
+    
     if (!userId || !planId || !paymentMethod) {
-      return NextResponse.json(
-        { success: false, error: 'Parâmetros obrigatórios: userId, planId, paymentMethod' },
-        { status: 400 }
-      );
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Parâmetros obrigatórios: userId, planId, paymentMethod' 
+        }), 
+        { 
+          status: 400, 
+          headers: { 'Content-Type': 'application/json' }
+        }
+      )
     }
 
     const plan = PLANS[planId];
@@ -65,17 +71,11 @@ export async function POST(request: NextRequest) {
         .from('subscriptions')
         .insert({
           user_id: userId,
-          provider: 'mercadopago',
           provider_payment_id: mpResponse.id.toString(),
+          provider_subscription_id: null,
           plan_id: planId,
-          amount_cents: plan.amount_cents,
-          currency: plan.currency,
-          status: 'pending',
-          payment_method: 'pix',
-          pix_qr_code: mpResponse.point_of_interaction.transaction_data.qr_code,
-          pix_qr_code_base64: mpResponse.point_of_interaction.transaction_data.qr_code_base64,
-          pix_copy_paste: mpResponse.point_of_interaction.transaction_data.qr_code,
-          expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 minutos
+          amount: plan.amount_cents / 100,
+          status: 'pending'
         })
         .select()
         .single();
@@ -90,12 +90,9 @@ export async function POST(request: NextRequest) {
 
       // Log de auditoria
       await supabase.from('payment_logs').insert({
-        subscription_id: subscription.id,
-        event_type: 'payment_created',
-        provider: 'mercadopago',
-        provider_payment_id: mpResponse.id.toString(),
-        status: 'pending',
-        data: mpResponse
+        user_id: userId,
+        event: 'payment_created',
+        payload: mpResponse
       });
 
       const response: CreatePaymentResponse = {
@@ -105,7 +102,7 @@ export async function POST(request: NextRequest) {
         qr_code: mpResponse.point_of_interaction.transaction_data.qr_code,
         qr_code_base64: mpResponse.point_of_interaction.transaction_data.qr_code_base64,
         copy_paste: mpResponse.point_of_interaction.transaction_data.qr_code,
-        expires_at: subscription.expires_at
+        expires_at: new Date(Date.now() + 30 * 60 * 1000).toISOString() // 30 minutos
       };
 
       return NextResponse.json(response);
@@ -114,7 +111,7 @@ export async function POST(request: NextRequest) {
     // ============================================
     // FLUXO CARTÃO
     // ============================================
-    if (paymentMethod === 'credit_card' || paymentMethod === 'debit_card') {
+    if (paymentMethod === 'card' || paymentMethod === 'credit_card' || paymentMethod === 'debit_card') {
       // Para cartão, retornamos URL do checkout do Mercado Pago
       // O frontend deve redirecionar o usuário para essa URL
       
@@ -167,14 +164,11 @@ export async function POST(request: NextRequest) {
         .from('subscriptions')
         .insert({
           user_id: userId,
-          provider: 'mercadopago',
           provider_payment_id: preferenceData.id,
+          provider_subscription_id: null,
           plan_id: planId,
-          amount_cents: plan.amount_cents,
-          currency: plan.currency,
-          status: 'pending',
-          payment_method: paymentMethod,
-          metadata: { preference_id: preferenceData.id }
+          amount: plan.amount_cents / 100,
+          status: 'pending'
         })
         .select()
         .single();
@@ -189,12 +183,9 @@ export async function POST(request: NextRequest) {
 
       // Log de auditoria
       await supabase.from('payment_logs').insert({
-        subscription_id: subscription.id,
-        event_type: 'payment_created',
-        provider: 'mercadopago',
-        provider_payment_id: preferenceData.id,
-        status: 'pending',
-        data: preferenceData
+        user_id: userId,
+        event: 'payment_created',
+        payload: preferenceData
       });
 
       const response: CreatePaymentResponse = {

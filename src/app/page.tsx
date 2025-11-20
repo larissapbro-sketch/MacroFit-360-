@@ -288,8 +288,9 @@ export default function Home() {
       </main>
 
       {/* Premium Modal */}
-      {showPremiumModal && (
+      {showPremiumModal && userId && (
         <PremiumModal
+          userId={userId}
           onClose={() => setShowPremiumModal(false)}
           onUpgrade={() => {
             setIsPremium(true)

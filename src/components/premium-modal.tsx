@@ -13,11 +13,12 @@ interface PremiumModalProps {
 }
 
 export default function PremiumModal({ userId, onClose, onUpgrade }: PremiumModalProps) {
-  const [loading, setLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [paymentData, setPaymentData] = useState<CreatePaymentResponse | null>(null)
   const [selectedMethod, setSelectedMethod] = useState<'pix' | 'credit_card' | null>(null)
   const [copied, setCopied] = useState(false)
   const [polling, setPolling] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
   // Polling para verificar status do pagamento
   useEffect(() => {
@@ -41,46 +42,38 @@ export default function PremiumModal({ userId, onClose, onUpgrade }: PremiumModa
     return () => clearInterval(interval)
   }, [polling, paymentData, userId, onUpgrade, onClose])
 
-  const handlePayment = async (method: 'pix' | 'credit_card') => {
-    setLoading(true)
-    setSelectedMethod(method)
-
+  async function handlePayment(paymentMethod: 'pix' | 'card') {
     try {
-      const response = await fetch('/api/create-payment', {
+      if (!userId) throw new Error('Usuário não autenticado. Faça login e tente novamente.')
+      const planId = 'premium_monthly'
+      const body = { userId, planId, paymentMethod }
+      setIsLoading(true)
+      setErrorMessage('')
+      const res = await fetch('/api/create-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId,
-          planId: 'premium_monthly',
-          paymentMethod: method
-        })
+        credentials: 'include',
+        body: JSON.stringify(body),
       })
-
-      const data: CreatePaymentResponse = await response.json()
-
-      if (!data.success) {
-        throw new Error(data.error || 'Erro ao criar pagamento')
-      }
-
+      const data = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(data?.error || `Erro ao criar pagamento (status ${res.status})`)
       setPaymentData(data)
-
+      
       // Se for PIX, iniciar polling
-      if (method === 'pix') {
+      if (paymentMethod === 'pix') {
         setPolling(true)
+        setSelectedMethod('pix')
       }
 
       // Se for cartão, redirecionar para checkout
-      if (method === 'credit_card' && data.checkout_url) {
+      if (paymentMethod === 'card' && data.checkout_url) {
         window.location.href = data.checkout_url
       }
-
-    } catch (error: any) {
-      console.error('Erro ao processar pagamento:', error)
-      alert(error.message || 'Erro ao processar pagamento. Tente novamente.')
-      setPaymentData(null)
-      setSelectedMethod(null)
+    } catch (err: any) {
+      console.error('handlePayment error', err)
+      setErrorMessage(err.message || 'Erro desconhecido ao iniciar pagamento')
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
@@ -193,6 +186,13 @@ export default function PremiumModal({ userId, onClose, onUpgrade }: PremiumModa
         </CardHeader>
 
         <CardContent className="space-y-6">
+          {/* Error Message */}
+          {errorMessage && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 text-center">
+              <p className="text-red-400 text-sm">{errorMessage}</p>
+            </div>
+          )}
+
           {/* Comparison */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Free Plan */}
@@ -269,10 +269,10 @@ export default function PremiumModal({ userId, onClose, onUpgrade }: PremiumModa
             <div className="space-y-3">
               <Button
                 onClick={() => handlePayment('pix')}
-                disabled={loading}
+                disabled={isLoading}
                 className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold text-lg py-6"
               >
-                {loading && selectedMethod === 'pix' ? (
+                {isLoading && selectedMethod === 'pix' ? (
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                 ) : (
                   <Sparkles className="w-5 h-5 mr-2" />
@@ -281,12 +281,12 @@ export default function PremiumModal({ userId, onClose, onUpgrade }: PremiumModa
               </Button>
 
               <Button
-                onClick={() => handlePayment('credit_card')}
-                disabled={loading}
+                onClick={() => handlePayment('card')}
+                disabled={isLoading}
                 variant="outline"
                 className="w-full border-slate-700 bg-slate-800 hover:bg-slate-700 text-white font-semibold text-lg py-6"
               >
-                {loading && selectedMethod === 'credit_card' ? (
+                {isLoading && selectedMethod === 'credit_card' ? (
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                 ) : (
                   <CreditCard className="w-5 h-5 mr-2" />

@@ -58,10 +58,8 @@ export async function GET(request: NextRequest) {
         id: latestSubscription.id,
         status: latestSubscription.status,
         plan_id: latestSubscription.plan_id,
-        amount_cents: latestSubscription.amount_cents,
-        payment_method: latestSubscription.payment_method,
-        created_at: latestSubscription.created_at,
-        paid_at: latestSubscription.paid_at
+        amount: latestSubscription.amount,
+        created_at: latestSubscription.created_at
       } : undefined
     };
 
